@@ -949,3 +949,6 @@ peripheral_target_address!(
     (pac::SAI3, cha.dr, u32, M2P, DMAReq::SAI3_A_DMA),
     (pac::SAI3, chb.dr, u32, P2M, DMAReq::SAI3_B_DMA),
 );
+
+// REED
+peripheral_target_address!((pac::DAC, dhr12ld, u32, M2P, DMAReq::DAC_CH1_DMA));

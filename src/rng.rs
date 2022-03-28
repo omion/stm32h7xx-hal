@@ -61,7 +61,20 @@ impl RngExt for RNG {
         // See RM0433 Rev 6 Section 33.3.6
         assert!(rng_clk.0 > hclk.0 / 32, "RNG: Clock too slow");
 
-        self.cr.modify(|_, w| w.ced().enabled().rngen().enabled());
+        //self.cr.modify(|_, w| w.ced().enabled().rngen().enabled());
+        self.cr.write(|w| unsafe { w.bits(0x40f00d04) });
+        unsafe {
+            core::ptr::write_volatile(
+                (0x48021800 + 0x010) as *mut u32,
+                0x17590ABC,
+            );
+            core::ptr::write_volatile(
+                (0x48021800 + 0x010) as *mut u32,
+                0x0000AA74,
+            );
+        }
+        self.cr.write(|w| unsafe { w.bits(0x00f00d04) });
+        while self.cr.read().bits() & 0x40000000 != 0 {}
 
         Rng { rb: self }
     }
@@ -90,6 +103,20 @@ impl Rng {
             if status.drdy().bit() {
                 return Ok(self.rb.dr.read().rndata().bits());
             }
+        }
+    }
+
+    /// A nonblocking version of value()
+    pub fn value_or_not(&mut self) -> Option<u32> {
+        let status = self.rb.sr.read();
+        if status.cecs().bit() {
+            None
+        } else if status.secs().bit() {
+            None
+        } else if status.drdy().bit() {
+            Some(self.rb.dr.read().rndata().bits())
+        } else {
+            None
         }
     }
 
