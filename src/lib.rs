@@ -27,6 +27,7 @@
 //! * [Ethernet](crate::ethernet) Feature gate `ethernet`
 //! * [USB HS](crate::usb_hs) Feature gate `usb_hs`
 //! * [LCD-TFT Display Controller](crate::ltdc) Feature gate `ltdc`
+//! * [CAN and CAN-FD](crate::can) Feature gate `can`
 //!
 //! External Memory
 //!
@@ -56,10 +57,6 @@
 #![allow(non_camel_case_types)]
 
 extern crate paste;
-
-#[derive(Debug)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub enum Never {}
 
 #[cfg(not(feature = "device-selected"))]
 compile_error!(
@@ -146,6 +143,8 @@ pub use crate::stm32::interrupt;
 
 #[cfg(feature = "device-selected")]
 pub mod adc;
+#[cfg(all(feature = "device-selected", feature = "can"))]
+pub mod can;
 #[cfg(all(feature = "device-selected", feature = "crc"))]
 pub mod crc;
 #[cfg(feature = "device-selected")]
@@ -206,3 +205,16 @@ pub mod usb_hs;
 pub mod watchdog;
 #[cfg(all(feature = "device-selected", feature = "xspi"))]
 pub mod xspi;
+
+#[cfg(feature = "device-selected")]
+mod sealed {
+    pub trait Sealed {}
+}
+#[cfg(feature = "device-selected")]
+pub(crate) use sealed::Sealed;
+
+fn stripped_type_name<T>() -> &'static str {
+    let s = core::any::type_name::<T>();
+    let p = s.split("::");
+    p.last().unwrap()
+}

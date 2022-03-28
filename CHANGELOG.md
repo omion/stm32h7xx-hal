@@ -2,8 +2,24 @@
 
 ## [Unreleased]
 
+* **Breaking**: Use const-generics for `GPIO`, add `DynamicPin`, `ErasedPin`,
+  inherent impls for `embedded-hal` like methods by-default, default modes [#334]
+* Replace crate::Never with core::convert::Infallible
+
 * pwr: Add backup domain voltage regulator control [#303][303]
-* MSRV increased to 1.56.1
+* MSRV increased to 1.59
+* flash: added flash implementation
+* timer: Implemented tick_timer method for LP Timers
+* timer: `counter()` method on LP Timers returns u16
+* timer: Fix bug in `counter()` TIM1/8/12/13/14 where return value would also
+  include UIF bit
+* serial: Add support for reconfiguring serial port settings [#324][324]
+    * **Note:** The serial port structs (`Serial`/`Rx`) are no longer zero-sized
+* serial: Add support for swapping Tx/Rx pins [#324][324]
+* serial: Add `join()` to combine `Tx`+`Rx` back into `Serial` [#324][324]
+
+* spi: add DuplexFailed error
+* spi: Fix arithmetic error in spi divider calculation
 
 ## [v0.11.0] 2021-12-18
 
@@ -215,3 +231,5 @@
 [292]: https://github.com/stm32-rs/stm32h7xx-hal/pull/292
 [297]: https://github.com/stm32-rs/stm32h7xx-hal/pull/297
 [303]: https://github.com/stm32-rs/stm32h7xx-hal/pull/303
+[324]: https://github.com/stm32-rs/stm32h7xx-hal/pull/324
+[334]: https://github.com/stm32-rs/stm32h7xx-hal/pull/334

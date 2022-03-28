@@ -12,7 +12,6 @@ use cortex_m_rt::entry;
 
 use hal::device;
 use hal::dma;
-use hal::hal::digital::v2::OutputPin;
 use hal::rcc::rec::Sai1ClkSel;
 use hal::sai::{self, I2sUsers, SaiChannel, SaiI2sExt};
 use hal::stm32;
@@ -94,11 +93,11 @@ fn main() -> ! {
 
     let gpioe = dp.GPIOE.split(ccdr.peripheral.GPIOE);
     let sai1_pins = (
-        gpioe.pe2.into_alternate_af6(),       // MCLK_A
-        gpioe.pe5.into_alternate_af6(),       // SCK_A
-        gpioe.pe4.into_alternate_af6(),       // FS_A
-        gpioe.pe6.into_alternate_af6(),       // SD_A
-        Some(gpioe.pe3.into_alternate_af6()), // SD_B
+        gpioe.pe2.into_alternate(),       // MCLK_A
+        gpioe.pe5.into_alternate(),       // SCK_A
+        gpioe.pe4.into_alternate(),       // FS_A
+        gpioe.pe6.into_alternate(),       // SD_A
+        Some(gpioe.pe3.into_alternate()), // SD_B
     );
 
     // - configure dma1 -------------------------------------------------------
@@ -118,7 +117,7 @@ fn main() -> ! {
     let mut dma1_str0: dma::Transfer<_, _, dma::MemoryToPeripheral, _, _> =
         dma::Transfer::init(
             dma1_streams.0,
-            unsafe { pac::Peripherals::steal().SAI1 },
+            unsafe { pac::Peripherals::steal().SAI1.dma_ch_b() }, // Channel B
             tx_buffer,
             None,
             dma_config,
@@ -133,7 +132,7 @@ fn main() -> ! {
     let mut dma1_str1: dma::Transfer<_, _, dma::PeripheralToMemory, _, _> =
         dma::Transfer::init(
             dma1_streams.1,
-            unsafe { pac::Peripherals::steal().SAI1 },
+            unsafe { pac::Peripherals::steal().SAI1.dma_ch_a() }, // Channel A
             rx_buffer,
             None,
             dma_config,
@@ -162,9 +161,9 @@ fn main() -> ! {
 
     // - reset ak4556 codec -----------------------------------------------
 
-    ak4556_reset.set_low().unwrap();
+    ak4556_reset.set_low();
     asm::delay(480_000); // ~ 1ms (datasheet specifies minimum 150ns)
-    ak4556_reset.set_high().unwrap();
+    ak4556_reset.set_high();
 
     // - start audio ------------------------------------------------------
 
@@ -204,7 +203,7 @@ fn main() -> ! {
 
     type TransferDma1Str1 = dma::Transfer<
         dma::dma::Stream1<stm32::DMA1>,
-        stm32::SAI1,
+        sai::dma::ChannelA<stm32::SAI1>,
         dma::PeripheralToMemory,
         &'static mut [u32; DMA_BUFFER_LENGTH],
         dma::DBTransfer,

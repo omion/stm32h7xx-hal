@@ -14,25 +14,11 @@ use embedded_hal::prelude::*;
 use embedded_hal::serial;
 use nb::block;
 
-use stm32::usart1::cr2::{CLKEN_A, CPHA_A, CPOL_A, LBCL_A, MSBFIRST_A};
+use stm32::usart1::cr2::{
+    CLKEN_A, CPHA_A, CPOL_A, LBCL_A, MSBFIRST_A, RXINV_A, TXINV_A,
+};
 
-use crate::gpio::gpioa::{
-    PA0, PA1, PA10, PA11, PA12, PA15, PA2, PA3, PA4, PA8, PA9,
-};
-use crate::gpio::gpiob::{
-    PB10, PB11, PB12, PB13, PB14, PB15, PB3, PB4, PB5, PB6, PB7, PB8, PB9,
-};
-use crate::gpio::gpioc::{PC10, PC11, PC12, PC6, PC7, PC8};
-use crate::gpio::gpiod::{PD0, PD1, PD10, PD2, PD5, PD6, PD7, PD8, PD9};
-use crate::gpio::gpioe::{PE0, PE1, PE7, PE8};
-use crate::gpio::gpiof::{PF6, PF7};
-use crate::gpio::gpiog::{PG14, PG7, PG9};
-use crate::gpio::gpioh::{PH13, PH14};
-#[cfg(not(feature = "rm0468"))]
-use crate::gpio::gpioi::PI9;
-#[cfg(not(feature = "stm32h7b0"))]
-use crate::gpio::gpioj::{PJ8, PJ9};
-use crate::gpio::{Alternate, AF11, AF14, AF4, AF6, AF7, AF8};
+use crate::gpio::{self, Alternate};
 use crate::rcc::{rec, CoreClocks, ResetEnable};
 use crate::stm32;
 #[cfg(feature = "rm0455")]
@@ -46,7 +32,6 @@ use crate::stm32::usart1::cr1::{M0_A as M0, PCE_A as PCE, PS_A as PS};
 use crate::stm32::{UART4, UART5, UART7, UART8};
 use crate::stm32::{USART1, USART2, USART3, USART6};
 use crate::time::Hertz;
-use crate::Never;
 
 /// Serial error
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -134,6 +119,9 @@ pub mod config {
         pub clockphase: ClockPhase,
         pub clockpolarity: ClockPolarity,
         pub lastbitclockpulse: bool,
+        pub swaptxrx: bool,
+        pub invertrx: bool,
+        pub inverttx: bool,
     }
 
     impl Config {
@@ -150,6 +138,9 @@ pub mod config {
                 clockphase: ClockPhase::First,
                 clockpolarity: ClockPolarity::IdleLow,
                 lastbitclockpulse: false,
+                swaptxrx: false,
+                invertrx: false,
+                inverttx: false,
             }
         }
 
@@ -205,6 +196,24 @@ pub mod config {
         /// clock pulse in the SCLK pin. Only applies to USART peripherals
         pub fn lastbitclockpulse(mut self, lastbitclockpulse: bool) -> Self {
             self.lastbitclockpulse = lastbitclockpulse;
+            self
+        }
+
+        /// If `true`, swap the Tx and Rx pins
+        pub fn swaptxrx(mut self, swaptxrx: bool) -> Self {
+            self.swaptxrx = swaptxrx;
+            self
+        }
+
+        /// If `true`, RX pin signal levels are inverted
+        pub fn invertrx(mut self, invertrx: bool) -> Self {
+            self.invertrx = invertrx;
+            self
+        }
+
+        /// If `true`, TX pin signal levels are inverted
+        pub fn inverttx(mut self, inverttx: bool) -> Self {
+            self.inverttx = inverttx;
             self
         }
     }
@@ -293,145 +302,147 @@ usart_pins! {
     USART1:
         TX: [
             NoTx,
-            PA9<Alternate<AF7>>,
-            PB6<Alternate<AF7>>,
-            PB14<Alternate<AF4>>
+            gpio::PA9<Alternate<7>>,
+            gpio::PB6<Alternate<7>>,
+            gpio::PB14<Alternate<4>>
         ]
         RX: [
             NoRx,
-            PA10<Alternate<AF7>>,
-            PB7<Alternate<AF7>>,
-            PB15<Alternate<AF4>>
+            gpio::PA10<Alternate<7>>,
+            gpio::PB7<Alternate<7>>,
+            gpio::PB15<Alternate<4>>
         ]
         CK: [
             NoCk,
-            PA8<Alternate<AF7>>
+            gpio::PA8<Alternate<7>>
         ]
     USART2:
         TX: [
             NoTx,
-            PA2<Alternate<AF7>>,
-            PD5<Alternate<AF7>>
+            gpio::PA2<Alternate<7>>,
+            gpio::PD5<Alternate<7>>
         ]
         RX: [
             NoRx,
-            PA3<Alternate<AF7>>,
-            PD6<Alternate<AF7>>
+            gpio::PA3<Alternate<7>>,
+            gpio::PD6<Alternate<7>>
         ]
         CK: [
             NoCk,
-            PA4<Alternate<AF7>>,
-            PD7<Alternate<AF7>>
+            gpio::PA4<Alternate<7>>,
+            gpio::PD7<Alternate<7>>
         ]
     USART3:
         TX: [
             NoTx,
-            PB10<Alternate<AF7>>,
-            PC10<Alternate<AF7>>,
-            PD8<Alternate<AF7>>
+            gpio::PB10<Alternate<7>>,
+            gpio::PC10<Alternate<7>>,
+            gpio::PD8<Alternate<7>>
         ]
         RX: [
             NoRx,
-            PB11<Alternate<AF7>>,
-            PC11<Alternate<AF7>>,
-            PD9<Alternate<AF7>>
+            gpio::PB11<Alternate<7>>,
+            gpio::PC11<Alternate<7>>,
+            gpio::PD9<Alternate<7>>
         ]
         CK: [
             NoCk,
-            PB12<Alternate<AF7>>,
-            PC12<Alternate<AF7>>,
-            PD10<Alternate<AF7>>
+            gpio::PB12<Alternate<7>>,
+            gpio::PC12<Alternate<7>>,
+            gpio::PD10<Alternate<7>>
         ]
     USART6:
         TX: [
             NoTx,
-            PC6<Alternate<AF7>>,
-            PG14<Alternate<AF7>>
+            gpio::PC6<Alternate<7>>,
+            gpio::PG14<Alternate<7>>
         ]
         RX: [
             NoRx,
-            PC7<Alternate<AF7>>,
-            PG9<Alternate<AF7>>
+            gpio::PC7<Alternate<7>>,
+            gpio::PG9<Alternate<7>>
         ]
         CK: [
             NoCk,
-            PC8<Alternate<AF7>>,
-            PG7<Alternate<AF7>>
+            gpio::PC8<Alternate<7>>,
+            gpio::PG7<Alternate<7>>
         ]
 }
 uart_pins! {
     UART4:
         TX: [
             NoTx,
-            PA0<Alternate<AF8>>,
-            PA12<Alternate<AF6>>,
-            PB9<Alternate<AF8>>,
-            PC10<Alternate<AF8>>,
-            PD1<Alternate<AF8>>,
-            PH13<Alternate<AF8>>
+            gpio::PA0<Alternate<8>>,
+            gpio::PA12<Alternate<6>>,
+            gpio::PB9<Alternate<8>>,
+            gpio::PC10<Alternate<8>>,
+            gpio::PD1<Alternate<8>>,
+            gpio::PH13<Alternate<8>>
         ]
         RX: [
             NoRx,
-            PA1<Alternate<AF8>>,
-            PA11<Alternate<AF6>>,
-            PB8<Alternate<AF8>>,
-            PC11<Alternate<AF8>>,
-            PD0<Alternate<AF8>>,
-            PH14<Alternate<AF8>>,
+            gpio::PA1<Alternate<8>>,
+            gpio::PA11<Alternate<6>>,
+            gpio::PB8<Alternate<8>>,
+            gpio::PC11<Alternate<8>>,
+            gpio::PD0<Alternate<8>>,
+            gpio::PH14<Alternate<8>>,
             #[cfg(not(feature = "rm0468"))]
-            PI9<Alternate<AF8>>
+            gpio::PI9<Alternate<8>>
         ]
     UART5:
         TX: [
             NoTx,
-            PB6<Alternate<AF14>>,
-            PB13<Alternate<AF14>>,
-            PC12<Alternate<AF8>>
+            gpio::PB6<Alternate<14>>,
+            gpio::PB13<Alternate<14>>,
+            gpio::PC12<Alternate<8>>
         ]
         RX: [
             NoRx,
-            PB5<Alternate<AF14>>,
-            PB12<Alternate<AF14>>,
-            PD2<Alternate<AF8>>
+            gpio::PB5<Alternate<14>>,
+            gpio::PB12<Alternate<14>>,
+            gpio::PD2<Alternate<8>>
         ]
     UART7:
         TX: [
             NoTx,
-            PA15<Alternate<AF11>>,
-            PB4<Alternate<AF11>>,
-            PE8<Alternate<AF7>>,
-            PF7<Alternate<AF7>>
+            gpio::PA15<Alternate<11>>,
+            gpio::PB4<Alternate<11>>,
+            gpio::PE8<Alternate<7>>,
+            gpio::PF7<Alternate<7>>
         ]
         RX: [
             NoRx,
-            PA8<Alternate<AF11>>,
-            PB3<Alternate<AF11>>,
-            PE7<Alternate<AF7>>,
-            PF6<Alternate<AF7>>
+            gpio::PA8<Alternate<11>>,
+            gpio::PB3<Alternate<11>>,
+            gpio::PE7<Alternate<7>>,
+            gpio::PF6<Alternate<7>>
         ]
     UART8:
         TX: [
             NoTx,
-            PE1<Alternate<AF8>>,
+            gpio::PE1<Alternate<8>>,
             #[cfg(not(feature = "stm32h7b0"))]
-            PJ8<Alternate<AF8>>
+            gpio::PJ8<Alternate<8>>
         ]
         RX: [
             NoRx,
-            PE0<Alternate<AF8>>,
+            gpio::PE0<Alternate<8>>,
             #[cfg(not(feature = "stm32h7b0"))]
-            PJ9<Alternate<AF8>>
+            gpio::PJ9<Alternate<8>>
         ]
 }
 
 /// Serial abstraction
 pub struct Serial<USART> {
     pub(crate) usart: USART,
+    ker_ck: Hertz,
 }
 
 /// Serial receiver
 pub struct Rx<USART> {
     _usart: PhantomData<USART>,
+    ker_ck: Hertz,
 }
 
 /// Serial transmitter
@@ -505,20 +516,28 @@ macro_rules! usart {
                     $(, $synchronous: bool)?
                 ) -> Result<Self, config::InvalidConfig>
                 {
-                    use crate::stm32::usart1::cr2::STOP_A as STOP;
-                    use self::config::*;
-
-                    let config = config.into();
-
                     // Enable clock for USART and reset
                     prec.enable().reset();
 
-                    // Get kernel clock
-	                let usart_ker_ck = Self::kernel_clk_unwrap(clocks).0;
+                    let ker_ck = Self::kernel_clk_unwrap(clocks);
+                    let mut serial = Serial { usart, ker_ck };
+                    let config = config.into();
+                    serial.usart.cr1.reset();
+                    serial.configure(&config $(, $synchronous )?);
+
+                    Ok(serial)
+                }
+
+                /// Runs the serial port configuration process
+                ///
+                /// The serial port must be disabled when called.
+                fn configure(&mut self, config: &config::Config $(, $synchronous: bool)?) {
+                    use crate::stm32::usart1::cr2::STOP_A as STOP;
+                    use self::config::*;
 
                     // Prescaler not used for now
-                    let usart_ker_ck_presc = usart_ker_ck;
-                    usart.presc.reset();
+                    let usart_ker_ck_presc = self.ker_ck.0;
+                    self.usart.presc.reset();
 
                     // Calculate baudrate divisor
                     let usartdiv = usart_ker_ck_presc / config.baudrate.0;
@@ -526,18 +545,14 @@ macro_rules! usart {
 
                     // 16 times oversampling, OVER8 = 0
                     let brr = usartdiv as u16;
-                    usart.brr.write(|w| { w.brr().bits(brr) });
-
-                    // disable hardware flow control
-                    // TODO enable DMA
-                    // usart.cr3.write(|w| w.rtse().clear_bit().ctse().clear_bit());
+                    self.usart.brr.write(|w| { w.brr().bits(brr) });
 
                     // Reset registers to disable advanced USART features
-                    usart.cr2.reset();
-                    usart.cr3.reset();
+                    self.usart.cr2.reset();
+                    self.usart.cr3.reset();
 
-                    // Set stop bits
-                    usart.cr2.write(|w| {
+                    // Configure serial mode
+                    self.usart.cr2.write(|w| {
                         w.stop().variant(match config.stopbits {
                             StopBits::STOP0P5 => STOP::STOP0P5,
                             StopBits::STOP1 => STOP::STOP1,
@@ -548,6 +563,20 @@ macro_rules! usart {
                         w.msbfirst().variant(match config.bitorder {
                             BitOrder::LsbFirst => MSBFIRST_A::LSB,
                             BitOrder::MsbFirst => MSBFIRST_A::MSB,
+                        });
+
+                        w.swap().bit(config.swaptxrx);
+
+                        w.rxinv().variant(if config.invertrx {
+                            RXINV_A::INVERTED
+                        } else {
+                            RXINV_A::STANDARD
+                        });
+
+                        w.txinv().variant(if config.inverttx {
+                            TXINV_A::INVERTED
+                        } else {
+                            TXINV_A::STANDARD
                         });
 
                         // If synchronous mode is not supported, these bits are
@@ -579,9 +608,9 @@ macro_rules! usart {
                         w
                     });
 
-                    // Enable transmission and receiving
-                    // and configure frame
-                    usart.cr1.write(|w| {
+                    // Enable transmission and receiving and configure frame
+                    // Retain enabled events
+                    self.usart.cr1.modify(|_, w| {
                         w.fifoen()
                             .set_bit() // FIFO mode enabled
                             .over8()
@@ -608,8 +637,24 @@ macro_rules! usart {
                                 _ => PS::EVEN,
                             })
                     });
+                }
 
-                    Ok(Serial { usart })
+                /// Applies the configuration to the serial port.
+                ///
+                /// Ensure that the serial port is not transmitting data when calling this method.
+                ///
+                /// # Panics
+                ///
+                /// Panics if DMA Rx or Tx are enabled.
+                pub fn reconfigure(&mut self, config: impl Into<config::Config> $(, $synchronous: bool)?) {
+                    if self.dma_rx_enabled() || self.dma_tx_enabled() {
+                        panic!("Cannot reconfigure serial while DMA enabled");
+                    }
+
+                    self.usart.cr1.modify(|_, w| w.ue().disabled());
+
+                    let config = config.into();
+                    self.configure(&config $(, $synchronous )?);
                 }
 
                 /// Enables the Rx DMA stream.
@@ -622,6 +667,11 @@ macro_rules! usart {
                     self.usart.cr3.modify(|_, w| w.dmar().clear_bit());
                 }
 
+                /// Returns `true` if the Rx DMA stream is enabled.
+                pub fn dma_rx_enabled(&self) -> bool {
+                    self.usart.cr3.read().dmar().bit_is_set()
+                }
+
                 /// Enables the Tx DMA stream.
                 pub fn enable_dma_tx(&mut self) {
                     self.usart.cr3.modify(|_, w| w.dmat().set_bit());
@@ -630,6 +680,11 @@ macro_rules! usart {
                 /// Disables the Tx DMA stream.
                 pub fn disable_dma_tx(&mut self) {
                     self.usart.cr3.modify(|_, w| w.dmat().clear_bit());
+                }
+
+                /// Returns `true` if the Tx DMA stream is enabled.
+                pub fn dma_tx_enabled(&self) -> bool {
+                    self.usart.cr3.read().dmat().bit_is_set()
                 }
 
                 /// Starts listening for an interrupt event
@@ -697,6 +752,8 @@ macro_rules! usart {
                     unsafe { (*$USARTX::ptr()).isr.read().rxne().bit_is_set() }
                 }
 
+                /// Splits the [`Serial`] struct into transmit ([`Tx`]) and receive ([`Rx`]) parts which can be used
+                /// separately.
                 pub fn split(self) -> (Tx<$USARTX>, Rx<$USARTX>) {
                     (
                         Tx {
@@ -704,15 +761,37 @@ macro_rules! usart {
                         },
                         Rx {
                             _usart: PhantomData,
+                            ker_ck: self.ker_ck,
                         },
                     )
                 }
+
+                /// Combines the [`Tx`] and [`Rx`] structs from [`Serial::split()`] into a [`Serial`]
+                #[allow(unused_variables)]
+                pub fn join(tx: Tx<$USARTX>, rx: Rx<$USARTX>) -> Self {
+                    assert_eq!(core::mem::size_of::<$USARTX>(), 0);
+                    Self {
+                        usart: unsafe { core::mem::zeroed::<$USARTX>() },
+                        ker_ck: rx.ker_ck,
+                    }
+                }
+
                 /// Releases the USART peripheral
                 pub fn release(self) -> $USARTX {
                     // Wait until both TXFIFO and shift register are empty
                     while self.usart.isr.read().tc().bit_is_clear() {}
 
                     self.usart
+                }
+
+                /// Returns a reference to the inner peripheral
+                pub fn inner(&self) -> &$USARTX {
+                    &self.usart
+                }
+
+                /// Returns a mutable reference to the inner peripheral
+                pub fn inner_mut(&mut self) -> &mut $USARTX {
+                    &mut self.usart
                 }
             }
 
@@ -753,6 +832,7 @@ macro_rules! usart {
                 fn read(&mut self) -> nb::Result<u8, Error> {
                     let mut rx: Rx<$USARTX> = Rx {
                         _usart: PhantomData,
+                        ker_ck: self.ker_ck,
                     };
                     rx.read()
                 }
@@ -847,16 +927,16 @@ macro_rules! usart {
             }
 
             impl serial::Write<u8> for Serial<$USARTX> {
-                type Error = Never;
+                type Error = core::convert::Infallible;
 
-                fn flush(&mut self) -> nb::Result<(), Never> {
+                fn flush(&mut self) -> nb::Result<(), Self::Error> {
                     let mut tx: Tx<$USARTX> = Tx {
                         _usart: PhantomData,
                     };
                     tx.flush()
                 }
 
-                fn write(&mut self, byte: u8) -> nb::Result<(), Never> {
+                fn write(&mut self, byte: u8) -> nb::Result<(), Self::Error> {
                     let mut tx: Tx<$USARTX> = Tx {
                         _usart: PhantomData,
                     };
@@ -875,9 +955,9 @@ macro_rules! usart {
                 // framing errors (which only occur in SmartCard
                 // mode); neither of these apply to our hardware
                 // configuration
-                type Error = Never;
+                type Error = core::convert::Infallible;
 
-                fn flush(&mut self) -> nb::Result<(), Never> {
+                fn flush(&mut self) -> nb::Result<(), Self::Error> {
                     // NOTE(unsafe) atomic read with no side effects
                     let isr = unsafe { (*$USARTX::ptr()).isr.read() };
 
@@ -888,7 +968,7 @@ macro_rules! usart {
                     }
                 }
 
-                fn write(&mut self, byte: u8) -> nb::Result<(), Never> {
+                fn write(&mut self, byte: u8) -> nb::Result<(), Self::Error> {
                     // NOTE(unsafe) atomic read with no side effects
                     let isr = unsafe { (*$USARTX::ptr()).isr.read() };
 
