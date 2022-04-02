@@ -610,7 +610,7 @@ peripheral_reset_and_enable_control! {
 
     #[cfg(all())]
     APB1H, "Advanced Peripheral Bus 1H (APB1H) peripherals" => [
-        Crs, Mdios, Opamp
+        Crs, Mdios, Opamp, Tim23, Tim24
     ];
     #[cfg(not(feature = "rm0455"))]
     APB1H, "" => [
